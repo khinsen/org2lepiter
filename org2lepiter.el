@@ -3,7 +3,7 @@
 (require 'uuidgen)
 
 ;; The directory to which the Lepiter pages are written
-(setq lepiter-v3-database-directory "~/Repos/lepiter/org-roam/")
+(setq lepiter-v4-database-directory "~/Repos/lepiter/org-roam/")
 
 ;; The author e-mail in exported Lepiter snippets
 (setq lepiter-export-email "author@mail.org")
@@ -81,46 +81,46 @@
     (concat iso-time iso-time-zone)))
 
 ;; Construct the JSON representation of a time stamp.
-(defun lepiter-v3-time-stamp (time)
+(defun lepiter-v4-time-stamp (time)
   (let* ((iso-stamp (lepiter-iso-time-stamp time)))
     `((__type . "time")
       (time . ((__type . "dateAndTime")
       (dateAndTimeString . ,iso-stamp))))))
 
 ;; Retrieve initial and last modification time stamps via git.
-(defun lepiter-v3-first-revision-time-stamp (filename)
+(defun lepiter-v4-first-revision-time-stamp (filename)
   (--> filename
        (concat "git -C " org-roam-directory " log --format=%at -- " it " | tail -1")
        shell-command-to-string
        string-to-number
-       lepiter-v3-time-stamp))
+       lepiter-v4-time-stamp))
 
-(defun lepiter-v3-last-revision-time-stamp (filename)
+(defun lepiter-v4-last-revision-time-stamp (filename)
   (--> filename
        (concat "git -C " org-roam-directory " log --format=%at -- " it " | head -1")
        shell-command-to-string
        string-to-number
-       lepiter-v3-time-stamp))
+       lepiter-v4-time-stamp))
 
 ;; Construct JSON data structures for page/snippet metadata
-(defun lepiter-v3-email (string)
+(defun lepiter-v4-email (string)
   `((__type . "email")
     (emailString . ,string)))
 
-(defun lepiter-v3-make-uid ()
+(defun lepiter-v4-make-uid ()
   `((__type . "uid")
     (uidString . ,(lepiter-make-uid))))
 
-(defun lepiter-v3-add-node-metadata (node-alist)
+(defun lepiter-v4-add-node-metadata (node-alist)
   (let ((children (alist-get 'children node-alist))
         (meta `((createTime . ,lepiter-create-time)
-                (createEmail . ,(lepiter-v3-email lepiter-export-email))
+                (createEmail . ,(lepiter-v4-email lepiter-export-email))
                 (editTime . ,lepiter-edit-time)
-                (editEmail . ,(lepiter-v3-email lepiter-export-email))
-                (uid . ,(lepiter-v3-make-uid)))))
+                (editEmail . ,(lepiter-v4-email lepiter-export-email))
+                (uid . ,(lepiter-v4-make-uid)))))
     (if children
         (let* ((children-with-meta
-                (mapcar #'lepiter-v3-add-node-metadata children))
+                (mapcar #'lepiter-v4-add-node-metadata children))
                (nodes-without-children
                 (--remove (equal (car it) 'children) node-alist)))
           (append meta
@@ -130,9 +130,9 @@
                   nodes-without-children))
       (append meta node-alist))))
 
-(defun lepiter-v3-add-page-metadata (title uuid node-alist)
+(defun lepiter-v4-add-page-metadata (title uuid node-alist)
   (append
-   `((__schema . "3.2")
+   `((__schema . "4.1")
      (__type . "page")
      (pageType . ((__type . "namedPage")
                   (title . ,title)))
@@ -141,13 +141,13 @@
    (--remove (equal (car it) 'uid) node-alist)))
 
 ;; Translate an org-roam page into a Lepiter page.
-(defun lepiter-v3-format-title (item)
+(defun lepiter-v4-format-title (item)
   (let* ((properties (alist-get 'properties item))
          (title (alist-get 'title properties)))
     (and title
          (lepiter-format-text title))))
 
-(defun lepiter-v3-org-item (item)
+(defun lepiter-v4-org-item (item)
   (cond
    ((stringp item)
     (list (s-chomp item)))
@@ -161,8 +161,8 @@
     (let ((type (alist-get 'type item))
           (ref (alist-get 'ref item))
           (properties (alist-get 'properties item))
-          (title (lepiter-v3-format-title item))
-          (contents (apply #'append (mapcar #'lepiter-v3-org-item (alist-get 'contents item)))))
+          (title (lepiter-v4-format-title item))
+          (contents (apply #'append (mapcar #'lepiter-v4-org-item (alist-get 'contents item)))))
       (cond
        ((equal type "section")
         (--filter it contents))
@@ -219,7 +219,7 @@
         (--filter it contents))
        (t nil))))))
 
-(defun lepiter-v3-org-as-json (buffer)
+(defun lepiter-v4-org-as-json (buffer)
   (with-current-buffer buffer
     (let* ((org-export-with-sub-superscripts nil)
            (org-export-use-babel nil)
@@ -228,43 +228,43 @@
         (goto-char 1)
         (json-read)))))
 
-(defun lepiter-v3-filename-for-uuid (uuid)
+(defun lepiter-v4-filename-for-uuid (uuid)
   (concat (org-id-int-to-b36
            (-reduce-from (lambda (acc char) (+ (* acc 256) char)) 0
                          (string-to-list (uuidgen--decode uuid))))
-          ".json"))
+          ".lepiter"))
 
-(defun lepiter-export-page-to-v3-format (page)
+(defun lepiter-export-page-to-v4-format (page)
   (let* ((buffer (find-file-noselect page))
-         (document (lepiter-v3-org-as-json buffer))
-         (properties (alist-get 'properties document))
+         (document (lepiter-v4-org-as-json buffer))
+          (properties (alist-get 'properties document))
          (contents (alist-get 'contents document))
-         (lepiter-create-time (lepiter-v3-first-revision-time-stamp page))
-         (lepiter-edit-time (lepiter-v3-last-revision-time-stamp page))
-         (org-items (apply #'append (mapcar #'lepiter-v3-org-item contents)))
-         (page-title (lepiter-v3-format-title document))
+         (lepiter-create-time (lepiter-v4-first-revision-time-stamp page))
+         (lepiter-edit-time (lepiter-v4-last-revision-time-stamp page))
+         (org-items (apply #'append (mapcar #'lepiter-v4-org-item contents)))
+         (page-title (lepiter-v4-format-title document))
          (page-uuid (uuidgen-3 lepiter-namespace-uuid page-title))
          (lepiter-page
-          (lepiter-v3-add-page-metadata
+          (lepiter-v4-add-page-metadata
            page-title page-uuid
-           (lepiter-v3-add-node-metadata
+           (lepiter-v4-add-node-metadata
             `((children . ,(vconcat org-items))))))
-         (filename (lepiter-v3-filename-for-uuid page-uuid)))
+         (filename (lepiter-v4-filename-for-uuid page-uuid)))
     (write-region
      (json-encode lepiter-page) nil
-     (concat lepiter-v3-database-directory filename))))
+     (concat lepiter-v4-database-directory filename))))
 
 ;; Iterate over all pages in the org-roam database
 (save-window-excursion
   (dolist (page (lepiter-org-roam-pages-for-export))
     (message "Processing %s" page)
-    (lepiter-export-page-to-v3-format page)))
+    (lepiter-export-page-to-v4-format page)))
 
 ;; Write the database properties file
 (let ((db-properties
        `((uuid . ,lepiter-namespace-uuid)
-         (schema . "3.2")
+         (schema . "4.1")
          (databaseName . "org-roam"))))
   (write-region
    (json-encode db-properties) nil
-   (concat lepiter-v3-database-directory "db.properties")))
+   (concat lepiter-v4-database-directory "lepiter.properties")))

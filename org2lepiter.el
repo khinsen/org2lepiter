@@ -13,18 +13,18 @@
 (setq lepiter-namespace-uuid "3680b78b-8c79-4f19-af13-c0103db9b2a2")
 
 ;; The list of pages to be exported. All pages by default, modify to exclude pages.
-(defun lepiter-org-roam-pages-for-export ()
-  (org-roam--list-all-files))
+(defun lepiter-org-roam-files-for-export ()
+  (-map #'car 
+        (org-roam-db-query [:select file :from files])))
 
-;; Given the filename of a file in the org-roam database,
+;; Given the id of a node in the org-roam database,
 ;; construct its title in the Lepiter database.
-(defun lepiter-title-for-file (filename)
-  (let* ((full-name (expand-file-name (concat org-roam-directory filename)))
-         (title (org-roam-db-query
-                 [:select title :from titles
-                  :where (= file $s1)
+(defun lepiter-title-for-node (node-id)
+  (let* ((title (org-roam-db-query
+                 [:select title :from nodes
+                  :where (= id $s1)
                   :limit 1]
-                 full-name)))
+                 node-id)))
     (and title
          (caar title))))
 
@@ -35,9 +35,9 @@
          (link-type (alist-get 'type properties))
          (post-blank (make-string (alist-get 'post-blank properties) 32)))
     (cond
-     ((equal link-type "file")
+     ((equal link-type "id")
       (concat "[["
-              (lepiter-title-for-file (alist-get 'path properties))
+              (lepiter-title-for-node (alist-get 'path properties))
               "]]"
               post-blank))
      ((member link-type '("http" "https"))
@@ -234,13 +234,13 @@
                          (string-to-list (uuidgen--decode uuid))))
           ".lepiter"))
 
-(defun lepiter-export-page-to-v4-format (page)
-  (let* ((buffer (find-file-noselect page))
+(defun lepiter-export-file-to-v4-format (org-filename)
+  (let* ((buffer (find-file-noselect org-filename))
          (document (lepiter-v4-org-as-json buffer))
           (properties (alist-get 'properties document))
          (contents (alist-get 'contents document))
-         (lepiter-create-time (lepiter-v4-first-revision-time-stamp page))
-         (lepiter-edit-time (lepiter-v4-last-revision-time-stamp page))
+         (lepiter-create-time (lepiter-v4-first-revision-time-stamp org-filename))
+         (lepiter-edit-time (lepiter-v4-last-revision-time-stamp org-filename))
          (org-items (apply #'append (mapcar #'lepiter-v4-org-item contents)))
          (page-title (lepiter-v4-format-title document))
          (page-uuid (uuidgen-3 lepiter-namespace-uuid page-title))
@@ -249,16 +249,17 @@
            page-title page-uuid
            (lepiter-v4-add-node-metadata
             `((children . ,(vconcat org-items))))))
-         (filename (lepiter-v4-filename-for-uuid page-uuid)))
+         (lepiter-filename (lepiter-v4-filename-for-uuid page-uuid)))
     (write-region
      (json-encode lepiter-page) nil
-     (concat lepiter-v4-database-directory filename))))
+     (concat lepiter-v4-database-directory lepiter-filename))
+    lepiter-filename))
 
 ;; Iterate over all pages in the org-roam database
 (save-window-excursion
-  (dolist (page (lepiter-org-roam-pages-for-export))
-    (message "Processing %s" page)
-    (lepiter-export-page-to-v4-format page)))
+  (dolist (file (lepiter-org-roam-files-for-export))
+    (message "Processing %s" file)
+    (lepiter-export-file-to-v4-format file)))
 
 ;; Write the database properties file
 (let ((db-properties
